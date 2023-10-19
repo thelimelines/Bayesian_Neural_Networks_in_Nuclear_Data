@@ -115,7 +115,7 @@ proton_label.grid(row=1, column=0), proton_entry.grid(row=1, column=1)
 def train_model_thread():
     global model, X_train, y_train, rtplot_ax
     real_time_plot = RealTimePlot(rtplot_ax)
-    history = model.fit(X_train, y_train, epochs=100, batch_size=32, validation_split=0.2, callbacks=[real_time_plot])
+    history = model.fit(X_train, y_train, epochs=1000, batch_size=32, validation_split=0.2, callbacks=[real_time_plot])
 
 # Function to start the thread
 def start_training_thread():

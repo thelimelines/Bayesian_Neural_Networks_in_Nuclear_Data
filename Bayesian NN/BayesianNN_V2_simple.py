@@ -78,7 +78,7 @@ model = tf.keras.Sequential([
 model.compile(loss='mean_squared_error', optimizer='adam')
 
 # Train the model
-model.fit(X_train_scaled, y_train_scaled, epochs=200, batch_size=32)
+model.fit(X_train_scaled, y_train_scaled, epochs=2000, batch_size=32)
 
 # Predict with uncertainty (Monte Carlo Dropout)
 def predict_with_uncertainty(input_data, n_iter=100):

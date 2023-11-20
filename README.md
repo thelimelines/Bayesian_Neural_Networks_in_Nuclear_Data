@@ -18,13 +18,13 @@ This project aims to use machine learning to analyze nuclear data, with a specif
 
 ## Installation
 
-To run the scripts in this repository, clone it to your local machine: git clone [URL to this repository]
+To run the scripts in this repository, clone it to your local machine: git clone https://github.com/thelimelines/Masters_project
 
 Ensure you have the necessary dependencies installed, including Python and relevant libraries such as TensorFlow, Pandas, etc.
 
 ## Usage
 
-Each script in the repository is standalone. Run `DataProcessing.py` to convert the AME2020 data from text to CSV format. The `Simple_NN.py` and `BayesianNN_V2_simple.py` scripts can be run to train the respective neural networks.
+So far, each script in the repository is standalone. Run `DataProcessing.py` to convert the AME2020 data from text to CSV format. The `Simple_NN.py` and `BayesianNN_V2_simple.py` scripts can be run to train the respective neural networks.
 
 ## Contributing
 
@@ -32,7 +32,7 @@ Contributions to this project are not welcome at this time as I work on my maste
 
 ## License
 
-[YET TO BE ASSIGNED]
+[YET TO BE OFFICIALLY ASSIGNED] All work is open under attribution
 
 ## Contact
 

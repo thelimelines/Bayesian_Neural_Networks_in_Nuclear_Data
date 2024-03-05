@@ -14,7 +14,7 @@ def posterior_mean_field(kernel_size, bias_size=0, dtype=None):
         tfp.layers.VariableLayer(2 * n, dtype=dtype),
         tfp.layers.DistributionLambda(lambda t: tfp.distributions.Independent(
             tfp.distributions.Normal(loc=t[..., :n],
-                                     scale=1e-5 + tf.nn.softplus(c + t[..., n:])),
+                                     scale=1 + tf.nn.softplus(c + t[..., n:])),
             reinterpreted_batch_ndims=1)),
     ])
 
@@ -29,21 +29,19 @@ def prior_trainable(kernel_size, bias_size=0, dtype=None):
     ])
 
 # Load the dataset
-df = pd.read_csv('Test NN\\AME2020_converted.csv')
+df = pd.read_csv('Beta half life\\Beta_Half_Lives.csv')
 
 # Prepare the data
-X = df[['Neutron Number', 'Proton Number']].values
-y = df['Binding Energy per Nucleon (keV)'].values
+X = df[['Mass Number', 'Atomic Number']].values
+y = np.log(df['Beta Partial Half-Life (s)'])
 
 # Split the data into training and test sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Scale the data
 scaler_X = StandardScaler().fit(X_train)
-scaler_y = StandardScaler().fit(y_train.reshape(-1, 1))
-
 X_train_scaled = scaler_X.transform(X_train)
-y_train_scaled = scaler_y.transform(y_train.reshape(-1, 1)).flatten()
+X_test_scaled = scaler_X.transform(X_test)
 
 # Define the Bayesian Neural Network model
 model = tf.keras.Sequential([
@@ -61,23 +59,11 @@ model = tf.keras.Sequential([
                                 make_prior_fn=prior_trainable)
 ])
 
-# model = tf.keras.Sequential([
-#     tfp.layers.DenseVariational(20, input_dim=2, activation='relu',
-#                                 make_posterior_fn=posterior_mean_field,
-#                                 make_prior_fn=prior_trainable),
-#     tfp.layers.DenseVariational(20, activation='relu',
-#                                 make_posterior_fn=posterior_mean_field,
-#                                 make_prior_fn=prior_trainable),
-#     tfp.layers.DenseVariational(1, activation='linear',
-#                                 make_posterior_fn=posterior_mean_field,
-#                                 make_prior_fn=prior_trainable)
-# ])
-
 # Compile the model
 model.compile(loss='mean_squared_error', optimizer='adam')
 
 # Train the model
-model.fit(X_train_scaled, y_train_scaled, epochs=2000, batch_size=32)
+model.fit(X_train_scaled, y_train, epochs=5000, batch_size=32)
 
 # Predict with uncertainty (Monte Carlo Dropout)
 def predict_with_uncertainty(input_data, n_iter=100):
@@ -93,44 +79,42 @@ def predict_with_uncertainty(input_data, n_iter=100):
 X_test_scaled = scaler_X.transform(X_test)
 
 # Prediction
-mean_preds, std_preds = predict_with_uncertainty(X_test_scaled)
+mean_preds_log_scale, std_preds_log_scale = predict_with_uncertainty(X_test_scaled)
 
 # Rescale the predictions back to original scale
-mean_preds_rescaled = scaler_y.inverse_transform(mean_preds.reshape(-1, 1)).flatten()
-std_preds_rescaled = std_preds * scaler_y.scale_
+mean_preds = np.exp(mean_preds_log_scale)
+std_preds = np.exp(std_preds_log_scale)
 
-# Identify proton and neutron combinations not in the training set
+# Identify mass and atomic number combinations not in the training set
 train_set = set([tuple(x) for x in X_train])
 all_set = set([tuple(x) for x in X])
 diff_set = all_set - train_set
 
-# Randomly select 20 of these combinations
+# Randomly select 50 of these combinations
 random_samples = np.array(random.sample(list(diff_set), 50))
 
 # Make predictions using the trained Bayesian Neural Network
 random_samples_scaled = scaler_X.transform(random_samples)
-mean_preds, std_preds = predict_with_uncertainty(random_samples_scaled)
+mean_preds_log_scale, std_preds_log_scale = predict_with_uncertainty(random_samples_scaled)
 
-# Rescale the predictions back to original scale
-mean_preds_rescaled = scaler_y.inverse_transform(mean_preds.reshape(-1, 1)).flatten()
-std_preds_rescaled = std_preds * scaler_y.scale_
+# Convert predictions back from log scale to the original scale
+mean_preds_rescaled = np.exp(mean_preds_log_scale)  # Adjusting for the log transformation
+std_preds_rescaled = np.exp(std_preds_log_scale)  # Adjusting for the log transformation
 
 # Retrieve the actual values and uncertainties from the dataset
 actual_values = []
-actual_uncertainties = []
 for sample in random_samples:
-    actual_row = df.loc[(df['Neutron Number'] == sample[0]) & (df['Proton Number'] == sample[1])]
-    actual_values.append(actual_row['Binding Energy per Nucleon (keV)'].values[0])
-    actual_uncertainties.append(actual_row['Uncertainty (keV)'].values[0])
+    actual_row = df.loc[(df['Mass Number'] == sample[0]) & (df['Atomic Number'] == sample[1])]
+    actual_values.append(actual_row['Beta Partial Half-Life (s)'].values[0])
 
 # Print predictions, uncertainties, and actual values
 for i in range(50):
-    print(f"Neutron Number: {random_samples[i][0]}, Proton Number: {random_samples[i][1]}")
-    print(f"Prediction: {mean_preds_rescaled[i]:.2f} ± {std_preds_rescaled[i]:.2f} keV")
-    
+    print(f"Mass Number: {random_samples[i][0]}, Atomic Number: {random_samples[i][1]}")
+    print(f"Prediction: {mean_preds_rescaled[i]:.2f} ± {std_preds_rescaled[i]:.2f} s")
+
     # Check if the actual value is within the prediction uncertainty
     within_uncertainty = mean_preds_rescaled[i] - std_preds_rescaled[i] <= actual_values[i] <= mean_preds_rescaled[i] + std_preds_rescaled[i]
     symbol = "(:" if within_uncertainty else "X"
     
-    print(f"Actual Value: {actual_values[i]:.2f} ± {actual_uncertainties[i]:.2f} keV {symbol}")
+    print(f"Actual Value: {actual_values[i]:.2f} s {symbol}")
     print("---")

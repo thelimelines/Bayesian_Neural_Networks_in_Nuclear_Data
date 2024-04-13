@@ -1,0 +1,99 @@
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+import tensorflow_probability as tfp
+import matplotlib.pyplot as plt
+from tensorflow import keras
+from tensorflow.keras import layers
+from sklearn.model_selection import train_test_split
+
+# Load and preprocess dataset
+df = pd.read_csv('Beta_Half_Lives_4_parameter/Training_data.csv')
+df['Pairing Term'] = np.where(df['Mass Number (A)'] % 2 == 0, np.where(df['Atomic Number (Z)'] % 2 == 0, 1, -1), 0)
+features = ['Mass Number (A)', 'Atomic Number (Z)', 'Pairing Term', 'Q_beta- WS4 (keV)']
+target = 'Beta Partial Half-Life (log(s))'
+cleaned_df = df[features + [target]].dropna()
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(cleaned_df[features], cleaned_df[target], test_size=0.15, random_state=42)
+train_size = len(X_train)
+
+# TensorFlow dataset conversion
+def create_tf_dataset(data, labels, batch_size=64):
+    dataset = tf.data.Dataset.from_tensor_slices((data.to_dict('list'), labels.values))
+    return dataset.batch(batch_size)
+
+train_dataset = create_tf_dataset(X_train, y_train)
+test_dataset = create_tf_dataset(X_test, y_test)
+
+# Bayesian Network Model
+def prior_and_posterior(kernel_size, bias_size, dtype=None):
+    """Function to create prior and posterior models for variational layers."""
+    n = kernel_size + bias_size
+    prior_model = tfp.layers.DistributionLambda(
+        lambda t: tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(n), scale_diag=tf.ones(n)))
+    posterior_model = keras.Sequential([
+        tfp.layers.VariableLayer(tfp.layers.MultivariateNormalTriL.params_size(n), dtype=dtype),
+        tfp.layers.MultivariateNormalTriL(n)
+    ])
+    return prior_model, posterior_model
+
+def bnn_model(features, train_size):
+    """Creates a Bayesian neural network model."""
+    inputs = {feature: layers.Input(name=feature, shape=(1,), dtype=tf.float32) for feature in features}
+    x = layers.concatenate(list(inputs.values()))
+    x = layers.BatchNormalization()(x)
+    
+    # Define the model layers with Bayesian inference
+    for units in [20, 10]:
+        # Define the prior and posterior for each DenseVariational layer
+        def make_prior(kernel_size, bias_size, dtype=None):
+            n = kernel_size + bias_size
+            prior_model = tfp.layers.DistributionLambda(
+                lambda t: tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(n), scale_diag=tf.ones(n)))
+            return prior_model
+
+        def make_posterior(kernel_size, bias_size, dtype=None):
+            n = kernel_size + bias_size
+            posterior_model = keras.Sequential([
+                tfp.layers.VariableLayer(tfp.layers.MultivariateNormalTriL.params_size(n), dtype=dtype),
+                tfp.layers.MultivariateNormalTriL(n)
+            ])
+            return posterior_model
+
+        # Add DenseVariational layer to the model
+        x = tfp.layers.DenseVariational(units=units,
+                                        make_prior_fn=make_prior,
+                                        make_posterior_fn=make_posterior,
+                                        kl_weight=1/train_size,
+                                        activation='relu')(x)
+    
+    outputs = layers.Dense(1)(x)
+    model = keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+model = bnn_model(features, train_size)
+model.compile(optimizer='rmsprop', loss='mean_squared_error', metrics=['RootMeanSquaredError'])
+
+# Model training and evaluation
+history = model.fit(train_dataset, epochs=500, validation_data=test_dataset, verbose=1)
+plt.figure(figsize=(10, 5))
+plt.plot(history.history['root_mean_squared_error'], label='Train RMSE')
+plt.plot(history.history['val_root_mean_squared_error'], label='Validation RMSE')
+plt.title('Training History')
+plt.xlabel('Epoch')
+plt.ylabel('RMSE')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Prediction and uncertainty estimation
+samples, targets = list(test_dataset.unbatch().shuffle(100).batch(10))[0]
+predictions = [model(samples, training=True) for _ in range(100)]
+predictions = np.concatenate(predictions, axis=1)
+mean_pred = np.mean(predictions, axis=1)
+min_pred, max_pred = np.min(predictions, axis=1), np.max(predictions, axis=1)
+
+# Display prediction results
+for i in range(len(mean_pred)):
+    print(f'Predictions mean: {mean_pred[i]:.2f}, min: {min_pred[i]:.2f}, max: {max_pred[i]:.2f}, range: {max_pred[i]-min_pred[i]:.2f} - Actual: {targets[i].numpy()}')

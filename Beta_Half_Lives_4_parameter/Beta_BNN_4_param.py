@@ -1,31 +1,47 @@
 import numpy as np
+import pandas as pd
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
 import tensorflow_probability as tfp
 import matplotlib.pyplot as plt
-
-import pandas as pd
+from tensorflow import keras
+from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
 
 # Load the dataset
-df = pd.read_csv('Beta half life\Log_Beta_Half_Lives.csv')
+df = pd.read_csv('Beta_Half_Lives_4_parameter\Training_data.csv')
 
-# Selecting the features and target
-features = df[['Mass Number', 'Atomic Number']]
-target = df['Beta Partial Half-Life (log(s))']
+# Feature Engineering for Pairing Term
+df['Pairing Term'] = np.where(df['Mass Number (A)'] % 2 == 0, 
+                              np.where(df['Atomic Number (Z)'] % 2 == 0, 1, -1), 
+                              0)
 
-# Splitting the data into train and test sets
-X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.15, random_state=42)
+# Select features and target
+q_beta_choice = 'Q_beta- WS4 (keV)'  # or 'Q_beta- WS4+RBF (keV)'
+
+features = ['Mass Number (A)', 'Atomic Number (Z)', 'Pairing Term', q_beta_choice]  # q_beta_choice is either 'Q_beta- WS4 (keV)' or 'Q_beta- WS4+RBF (keV)'
+target = 'Beta Partial Half-Life (log(s))'
+
+# Cleaning data: Remove rows with NaN in any specified feature or the target
+cleaned_df = df[features + [target]].dropna()
+
+# Splitting the data
+X_train, X_test, y_train, y_test = train_test_split(
+    cleaned_df[features], cleaned_df[target], test_size=0.15, random_state=42
+)
+
+# Setting the train_size variable
+train_size = len(X_train)
 
 # Convert to TensorFlow datasets
 batch_size = 64
-train_dataset = tf.data.Dataset.from_tensor_slices(({"Mass Number": X_train['Mass Number'], "Atomic Number": X_train['Atomic Number']}, y_train)).batch(batch_size)
-test_dataset = tf.data.Dataset.from_tensor_slices(({"Mass Number": X_test['Mass Number'], "Atomic Number": X_test['Atomic Number']}, y_test)).batch(batch_size)
 
-dataset_size = len(df)      # May be manually overidden for testing
-train_size = len(X_train)
+# Convert to TensorFlow datasets
+def create_tf_dataset(data, labels):
+    dataset_dict = {feature: data[feature].values[:, None] for feature in data.columns}
+    return tf.data.Dataset.from_tensor_slices((dataset_dict, labels)).batch(batch_size)
 
+train_dataset = create_tf_dataset(X_train, y_train)
+test_dataset = create_tf_dataset(X_test, y_test)
 
 # Define prior guesses as multivariate normal with means=0, SDs=1 and no initial covariences
 def prior(kernel_size, bias_size, dtype=None):
@@ -86,11 +102,9 @@ def train_network(model, loss, train_dataset, test_dataset, num_epochs):
     _, rmse = model.evaluate(test_dataset, verbose=0)
     print(f"Test RMSE: {round(rmse, 3)}")
 
-FEATURE_NAMES = ["Mass Number", "Atomic Number"]
-
 def create_model_inputs():
     inputs = {}
-    for feature_name in FEATURE_NAMES:
+    for feature_name in features:
         inputs[feature_name] = layers.Input(name=feature_name, shape=(1,), dtype=tf.float32)
     return inputs
 

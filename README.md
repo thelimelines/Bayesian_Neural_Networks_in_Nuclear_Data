@@ -1,7 +1,7 @@
 # Masters_project - Machine learning for nuclear astrophysics
 
 ## Project Description
-This project aims to use statistics based machine learning to predict beta decay partial half-lives in order to restrict uncertainties in r-process nucleosynthesis/
+This project aims to use statistics based machine learning to predict beta decay partial half-lives in order to restrict uncertainties in r-process nucleosynthesis.
 
 ## Folder Structure and overview
 

@@ -16,7 +16,11 @@ df['Pairing Term'] = np.where(df['Mass Number (A)'] % 2 == 0,
 q_beta_choice = 'Q_beta- WS4 (keV)'
 features = ['Mass Number (A)', 'Atomic Number (Z)', 'Pairing Term', q_beta_choice]
 target = 'Beta Partial Half-Life (log(s))'
-cleaned_df = df[features + [target]].dropna()
+# cleaned_df = df[features + [target]].dropna() # uncomment to train on ALL data
+
+# Filter the dataset to include only half-lives less than 10^6 s (log(s) < 6)
+filtered_df = df[df[target] < 6]
+cleaned_df = filtered_df[features + [target]].dropna()
 
 # Data splitting
 X_train, X_test, y_train, y_test = train_test_split(
@@ -43,8 +47,7 @@ def build_bnn_model(train_size, features, hidden_units=[32,8], learning_rate=0.0
 
     for units in hidden_units:
         x = tfp.layers.DenseVariational(units, make_prior_fn=prior, make_posterior_fn=posterior,
-                                        kl_weight=1/(100*train_size), activation='ReLU')(x)
-    
+                                        kl_weight=1/(40*train_size), activation='relu')(x)
     distribution_params = layers.Dense(2)(x)
     outputs = tfp.layers.IndependentNormal(1)(distribution_params)
     model = keras.Model(inputs=inputs, outputs=outputs)

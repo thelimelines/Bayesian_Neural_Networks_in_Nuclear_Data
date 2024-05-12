@@ -15,7 +15,12 @@ data['Lower CI (95%) Linear'] = np.power(10, data['Lower CI (95%)'])
 data['Upper CI (95%) Linear'] = np.power(10, data['Upper CI (95%)'])
 
 # Sample approximately 1/10th of the data randomly
-sampled_data = data.sample(frac=0.1, random_state=73)
+# sampled_data = data.sample(frac=1, random_state=3141592) #uncomment for full plot
+
+# Filter data for half-lives less than 10^6 seconds
+filtered_data = data[data['Experimental Beta Half-Life Linear'] < 1e6]
+sampled_data = filtered_data.sample(frac=1, random_state=908)  # Adjust fraction as necessary depending on data size
+
 
 # Scatter plot with error bars for the sampled data
 plt.figure(figsize=(12, 10))
@@ -37,7 +42,7 @@ plt.plot([sampled_data['Experimental Beta Half-Life Linear'].min(), sampled_data
          'r--', label='Predicted = Experimental')
 
 # Adjust grid for better visibility with lighter subgrids
-plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
+plt.grid(True, which='major', linestyle='--', linewidth=0.5, color='gray')
 
 plt.legend()
 plt.show()
